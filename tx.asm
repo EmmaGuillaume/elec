@@ -32,16 +32,57 @@ _TX_64LEDS:
     MOVWF FSR0L, 0      ; Définit le LSB du registre d'adressage indirect
     MOVFF _pC + 1, WREG ; Charge le MSB du pointeur de LED_MATRIX dans WREG
     MOVWF FSR0H, 0      ; Définit le MSB du registre d'adressage indirect
-    
-    ;sortie
-    ;sortine numérique
-    ;1 ou 0
 
     ; Désormais, dÃ¨s l'exécution de l'instruction suivante, la valeur pointée par <FSR0H-FSR0L> est chargée dans WREG, et <FSR0H-FSR0L> est incrémenté :
     ; MOVF POSTINC0, 0, 0
 
     ; Envoie la commande pour piloter chacune des 64 LEDs
     ; TODO
+
+    RETURN
+    
+TX_1octet:
+    movf POSTINC0, W     ; charger *FSR0 dans WREG et incrémenter FSR0
+
+    ; Bit 7
+    btfss WREG, 7
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 6
+    btfss WREG, 6
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 5
+    btfss WREG, 5
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 4
+    btfss WREG, 4
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 3
+    btfss WREG, 3
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 2
+    btfss WREG, 2
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 1
+    btfss WREG, 1
+    CALL TX_1b_0
+    CALL TX_1b_1
+
+    ; Bit 0
+    btfss WREG, 0
+    CALL TX_1b_0
+    CALL TX_1b_1
 
     RETURN
 
