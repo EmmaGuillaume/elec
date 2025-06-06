@@ -16,54 +16,11 @@ extern void TRANSMISSION(void);
 volatile char LED_MATRIX[256]; // Définition d'une matrice de 64 x 4 octets (R/G/B/W)
 volatile const char * pC = LED_MATRIX; // Pointeur vers LED_MATRIX
 
-// Fonction pour initialiser un motif statique
-void init_pattern(void) {
-    // Effacer d'abord toutes les LEDs
-    for (int i = 0; i < 256; i++) {
-        LED_MATRIX[i] = 0;
-    }
+int passe_bas;
+int passe_bande1;
+int passe_bande2;
+int passe_haut;
 
-    // Ligne du haut
-    for (int led = 0; led < 8; led++) {
-        LED_MATRIX[led*4] = 16;      // R =
-        LED_MATRIX[led*4+1] = 0;      // G
-        LED_MATRIX[led*4+2] = 0;      // B
-        LED_MATRIX[led*4+3] = 0;      // W
-    }
-    
-    // Ligne du bas
-    for (int led = 56; led < 64; led++) {
-        LED_MATRIX[led*4] = 16;      // R
-        LED_MATRIX[led*4+1] = 0;      // G
-        LED_MATRIX[led*4+2] = 0;      // B
-        LED_MATRIX[led*4+3] = 0;      // W
-    }
-    
-    // Colonne de gauche
-    for (int led = 0; led < 56; led += 8) {
-        LED_MATRIX[led*4] = 16;      // R
-        LED_MATRIX[led*4+1] = 0;      // G
-        LED_MATRIX[led*4+2] = 0;      // B
-        LED_MATRIX[led*4+3] = 0;      // W
-    }
-    
-    // Colonne de droite
-    for (int led = 7; led < 64; led += 8) {
-        LED_MATRIX[led*4] = 16;      // R
-        LED_MATRIX[led*4+1] = 0;      // G
-        LED_MATRIX[led*4+2] = 0;      // B
-        LED_MATRIX[led*4+3] = 0;      // W
-    }
-
-    int innerSquare[] = {18, 19, 20, 21, 26, 27, 28, 29, 34, 35, 36, 37, 42, 43, 44, 45};
-    for (int i = 0; i < 16; i++) {
-        int led = innerSquare[i];
-        LED_MATRIX[led*4] = 0;        // R
-        LED_MATRIX[led*4+1] = 16;     // G
-        LED_MATRIX[led*4+2] = 0;      // B
-        LED_MATRIX[led*4+3] = 0;      // W
-    }
-}
 
 void transmition(void) {
     LATB |= 0b00100000;  // Allumer LED_CMD
@@ -83,6 +40,15 @@ void transmition(void) {
     __delay_ms(200);
 }
 
+void motif_cool(void) {
+    for (int i = 0; i < 64; i++) {
+        LED_MATRIX[i*4] = 0;     // G
+        LED_MATRIX[i*4+1] = 2;   // R
+        LED_MATRIX[i*4+2] = 6;   // B
+        LED_MATRIX[i*4+3] = 1;   // W - intensité minimale
+    }
+}
+
 void init(void) {
     /* Configuration des entrées / sorties */
     TRISB &= 0xEF; // LED_MASTER : OUTPUT
@@ -94,24 +60,70 @@ void init(void) {
     LATB &= 0xEF; // Éteindre LEDM
     LATC = 0x00;  // Éteindre LED0-7
     LATB &= 0b11011111;  // Éteindre LED_CMD
+    
+    // Configuation des entrées sorties analogiques
+    // ANA2 : passe bas
+    // ANA3 : passe bande low
+    // ANA4 : passe bande high
+    // ANA5 : passe haut
+    TRISA &= 0b00111100; // ANA2, ANA3, ANA4, ANA5 : INPUT
+    ANSELA &= 0b00111100; // ANA2, ANA3, ANA4, ANA5 : ANALOGIQUE
+}
+
+void read_filters(void) {
+    
+}
+
+void hsv_to_rgb_scaled(unsigned int h, char *r, char *g, char *b) {
+    float s = 1.0, v = 1.0; // Full saturation and brightness
+    float c = v * s;
+    float x = c * (1 - abs((h / 60) % 2 - 1));
+    float m = v - c;
+    float r_, g_, b_;
+
+    if(h < 60)      { r_ = c; g_ = x; b_ = 0; }
+    else if(h < 120){ r_ = x; g_ = c; b_ = 0; }
+    else if(h < 180){ r_ = 0; g_ = c; b_ = x; }
+    else if(h < 240){ r_ = 0; g_ = x; b_ = c; }
+    else if(h < 300){ r_ = x; g_ = 0; b_ = c; }
+    else            { r_ = c; g_ = 0; b_ = x; }
+
+    *r = (char)(r_ * 16);
+    *g = (char)(g_ * 16);
+    *b = (char)(b_ * 16);
+}
+
+void motif_rainbow_wave(void) {
+    static unsigned int base_hue = 0;
+
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            int index = (y * 8 + x) * 4;
+            unsigned int hue = (base_hue + x * 30 + y * 15) % 360;
+
+            char r, g, b;
+            hsv_to_rgb_scaled(hue, &r, &g, &b);
+
+            LED_MATRIX[index + 0] = g; // G
+            LED_MATRIX[index + 1] = r; // R
+            LED_MATRIX[index + 2] = b; // B
+            LED_MATRIX[index + 3] = 0; // W (optional)
+        }
+    }
+
+    base_hue = (base_hue + 3) % 360;
 }
 
 void main(void) {
-    //init_pattern(); // Initialiser le motif de LEDs
-    
     init();
-    //init_pattern();
+    motif_cool();
     
-    /* Boucle principale */
     while(1) {
-        // Envoyer les données pour allumer les LEDs
-        //TX_64LEDS();
-        //transmition();
-        TRANSMISSION();
-        
-        // Allumer la LED maître pour indiquer que l'affichage est actif
-        LATB |= 0x10;
-    }
-    
-    return;
+    //motif_rainbow_wave(); // update the matrix pattern
+    LATB &= ~0x10;         // Turn off LED_MASTER
+    TX_64LEDS();
+    __delay_ms(2);
+    LATB |= 0x10;          // Turn on LED_MASTER
+    __delay_ms(5);        // Control speed of animation
+}
 }

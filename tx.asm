@@ -14,7 +14,7 @@ psect   txfunc,local,class=CODE,reloc=2 ; PIC18's should have a reloc (alignment
 ; | _TX_64LEDS  <--|--> void TX_64LEDS(void)           |
 ; | _pC         <--|--> volatile const char * pC       |
 ; | _LED_MATRIX <--|--> volatile char LED_MATRIX [256] |
-
+    
 ; Fonction globales
 global _TX_64LEDS ; Fonction dÃ©finie dans tx.asm ; Fonction permettant d'envoyer la commande pour piloter les 64 LEDs, telle que dÃ©crite dans LED_MATRIX
 global _TRANSMISSION
@@ -23,68 +23,87 @@ global _pC         ; Constante dÃ©finie dans main.c ; Pointeur vers LED_MATRIX
 global _LED_MATRIX ; Variable  dÃ©finie dans main.c ; Tableau (256 octets = 64 x 4) des composantes RGBW de la matrice LED (1 octet/couleur/LED)
 
 _TX_64LEDS:
-    ; Cette fonction envoie sur CMD_MATRIX l'intégralité de la matrice LED_MATRIX,
-    ; Chaque bit de chaque octet encodé en largeur d'impulsion
+    ; Initialiser le pointeur FSR0 vers LED_MATRIX
+    MOVFF _pC + 0, WREG
+    MOVWF FSR0L, 0
+    MOVFF _pC + 1, WREG
+    MOVWF FSR0H, 0
 
-    ; Place un pointeur au début de la matrice LED_MATRIX
-    ; Voir section 10.8.12 (p. 150) de la datasheet PIC18F25K40
-    MOVFF _pC + 0, WREG ; Charge le LSB du pointeur de LED_MATRIX dans WREG
-    MOVWF FSR0L, 0      ; Définit le LSB du registre d'adressage indirect
-    MOVFF _pC + 1, WREG ; Charge le MSB du pointeur de LED_MATRIX dans WREG
-    MOVWF FSR0H, 0      ; Définit le MSB du registre d'adressage indirect
-
-    ; Désormais, dÃ¨s l'exécution de l'instruction suivante, la valeur pointée par <FSR0H-FSR0L> est chargée dans WREG, et <FSR0H-FSR0L> est incrémenté :
-    ; MOVF POSTINC0, 0, 0
-
-    ; Envoie la commande pour piloter chacune des 64 LEDs
-    ; TODO
-
+    REPT 256
+	CALL TX_1octet
+    ENDM
+    
     RETURN
     
 TX_1octet:
     movf POSTINC0, W     ; charger *FSR0 dans WREG et incrémenter FSR0
 
-    ; Bit 7
-    btfss WREG, 7
-    CALL TX_1b_0
-    CALL TX_1b_1
+    ; Bit 7 à 0
+    btfsc WREG, 7
+    goto send_1
+    call TX_1b_0
+    goto next6
+send_1:
+    call TX_1b_1
+next6:
 
-    ; Bit 6
-    btfss WREG, 6
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 6
+    goto send_2
+    call TX_1b_0
+    goto next5
+send_2:
+    call TX_1b_1
+next5:
 
-    ; Bit 5
-    btfss WREG, 5
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 5
+    goto send_3
+    call TX_1b_0
+    goto next4
+send_3:
+    call TX_1b_1
+next4:
 
-    ; Bit 4
-    btfss WREG, 4
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 4
+    goto send_4
+    call TX_1b_0
+    goto next3
+send_4:
+    call TX_1b_1
+next3:
 
-    ; Bit 3
-    btfss WREG, 3
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 3
+    goto send_5
+    call TX_1b_0
+    goto next2
+send_5:
+    call TX_1b_1
+next2:
 
-    ; Bit 2
-    btfss WREG, 2
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 2
+    goto send_6
+    call TX_1b_0
+    goto next1
+send_6:
+    call TX_1b_1
+next1:
 
-    ; Bit 1
-    btfss WREG, 1
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 1
+    goto send_7
+    call TX_1b_0
+    goto next0
+send_7:
+    call TX_1b_1
+next0:
 
-    ; Bit 0
-    btfss WREG, 0
-    CALL TX_1b_0
-    CALL TX_1b_1
+    btfsc WREG, 0
+    goto send_8
+    call TX_1b_0
+    goto end_tx
+send_8:
+    call TX_1b_1
+end_tx:
 
-    RETURN
+    return
 
 TX_1b_0:
     ; Turn on LED_CMD (RB5) and RB4
@@ -92,19 +111,9 @@ TX_1b_0:
     nop
     nop
     nop
-    nop
-    nop
 
     ; Turn off LED_CMD (RB5) and RB4
     bcf PORTB, 5       ; Clear RB5
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
     nop
     nop
     nop
@@ -129,23 +138,11 @@ TX_1b_1:
     nop
     nop
     nop
-    nop
-    nop
 
     ; Turn off LED_CMD (RB5) and RB4 again
     bcf PORTB, 5       ; Clear RB5
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
-    nop
 
     RETURN
-    
-
-    
 
 _TRANSMISSION:
     CALL TX_1b_0
