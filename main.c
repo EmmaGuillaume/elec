@@ -21,15 +21,6 @@ int passe_bande1;
 int passe_bande2;
 int passe_haut;
 
-void motif_cool(void) {
-    for (int i = 0; i < 64; i++) {
-        LED_MATRIX[i*4] = 0;     // G
-        LED_MATRIX[i*4+1] = 2;   // R
-        LED_MATRIX[i*4+2] = 6;   // B
-        LED_MATRIX[i*4+3] = 1;   // W - intensité minimale
-    }
-}
-
 void init(void) {
     /* Configuration des entrées / sorties */
     TRISB &= 0xEF; // LED_MASTER : OUTPUT
@@ -48,23 +39,27 @@ void init(void) {
     ANSELA |= 0b00111100; // bits 2 à 5 en ANALOG
     
     /* Configuration du convertisseur ADC */
-    ADCON0 = 0x00; // ADC OFF au début, CHS à 0000
-    ADCON1 = 0x00; // Résultat justifié à droite
-    ADCON2 = 0x90; // TACQ + Clock de conversion
+     // ADC config
+    ADCON0bits.ADFM = 1; // Right justified
+    ADCON0bits.ADCS = 1; // Clock truc 
 }
 
 
 unsigned int read_adc_channel(unsigned char channel) {
-    unsigned int result;
+    int result;
 
-    ADCON0 = (channel << 2); // Positionner CHS
-    ADCON0bits.ADON = 1;     // Allumer l'ADC
-    __delay_us(5);           // Temps d'acquisition
-    ADCON0bits.GO = 1;       // Démarrer conversion
-    while (ADCON0bits.GO);   // Attendre fin conversion
+    ADPCH = channel;            // Sélectionner le canal)
+    ADCON0bits.ADON = 1;          // Allumer l'ADC
+    __delay_us(5);              // Temps d'acquisition
+    ADCON0bits.GO = 1;          // Démarrer la conversion
+    while (ADCON0bits.GO);      // Attendre la fin
+
+    int min = 150;
+    int max = 700;
     result = (ADRESH << 8) | ADRESL;
-    ADCON0bits.ADON = 0;     // Éteindre l'ADC pour éviter du bruit
+    result = (result - min) * (max / (max - min));
 
+    ADCON0bits.ADON = 0;          // Éteindre ADC pour éviter bruit (optionnel)
     return result;
 }
 
@@ -82,11 +77,11 @@ void draw_column(int x, int level, char r, char g, char b) {
             LED_MATRIX[index + 0] = g;
             LED_MATRIX[index + 1] = r;
             LED_MATRIX[index + 2] = b;
-            LED_MATRIX[index + 3] = 1; // Optionnel : allumer W
+            LED_MATRIX[index + 3] = 0; // pas de blanc parce que c'est trop douloureux pour les rétines de Emma
         }
     }
 
-void draw_spectrum(void) {
+void draw_spectrum_rbw(void) {
     // Effacer la matrice
     for (int i = 0; i < 64; i++) {
         LED_MATRIX[i*4] = 0;
@@ -96,22 +91,60 @@ void draw_spectrum(void) {
     }
 
     draw_column(0, passe_bas, 6, 0, 0);      // Rouge
+    draw_column(1, passe_bas, 6, 0, 0);      // Rouge
     draw_column(2, passe_bande1, 6, 6, 0);  // Jaune
+    draw_column(3, passe_bande1, 6, 6, 0);  // Jaune
     draw_column(4, passe_bande2, 0, 6, 0);   // Vert
+    draw_column(5, passe_bande2, 0, 6, 0);   // Vert
     draw_column(6, passe_haut, 0, 0, 6);     // Bleu
+    draw_column(7, passe_haut, 0, 0, 6);     // Bleu
+}
+
+void draw_spectrum_lebanese(void) {
+    // Effacer la matrice
+    for (int i = 0; i < 64; i++) {
+        LED_MATRIX[i*4] = 0;
+        LED_MATRIX[i*4+1] = 0;
+        LED_MATRIX[i*4+2] = 0;
+        LED_MATRIX[i*4+3] = 0;
+    }
+
+    draw_column(0, passe_bas,    6, 2, 0);
+    draw_column(1, passe_bas,    6, 2, 0);
+    draw_column(2, passe_bande1, 6, 4, 1);
+    draw_column(3, passe_bande1, 6, 4, 1);
+    draw_column(4, passe_bande2, 6, 6, 6);
+    draw_column(5, passe_bande2, 6, 6, 6);
+    draw_column(6, passe_haut,   6, 0, 4);
+    draw_column(7, passe_haut,   6, 0, 4);
+}
+
+void draw_spectrum_aro(void) {
+    // Effacer la matrice
+    for (int i = 0; i < 64; i++) {
+        LED_MATRIX[i*4] = 0;
+        LED_MATRIX[i*4+1] = 0;
+        LED_MATRIX[i*4+2] = 0;
+        LED_MATRIX[i*4+3] = 0;
+    }
+
+    draw_column(0, passe_bas,    0, 6, 0);
+    draw_column(1, passe_bas,    0, 6, 0);
+    draw_column(2, passe_bande1, 2, 6, 2);
+    draw_column(3, passe_bande1, 2, 6, 2);
+    draw_column(4, passe_bande2, 6, 6, 6);
+    draw_column(5, passe_bande2, 6, 6, 6);
+    draw_column(6, passe_haut,   3, 3, 3);
+    draw_column(7, passe_haut,   3, 3, 3);
 }
 
 void main(void) {
     init();
 
     while(1) {
-        for (int i=0; i<8; i++){ // -------------------------------------------------------------- DEMO CODE
-            LATC = 0x01 << i;    // Commander les LEDs de test sur le PORTC ---------------------- DEMO CODE
-            __delay_ms(125);     // Macro de délai ----------------------------------------------- DEMO CODE
-        }
         read_filters();
-        //draw_spectrum();
-        //TX_64LEDS();
+        draw_spectrum_lebanese();
+        TX_64LEDS();
         
     }
 }
