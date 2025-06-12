@@ -21,25 +21,6 @@ int passe_bande1;
 int passe_bande2;
 int passe_haut;
 
-
-void transmition(void) {
-    LATB |= 0b00100000;  // Allumer LED_CMD
-    LATB |= 0x10;
-    __delay_ms(200);
-
-    LATB &= 0b11011111;  // Éteindre LED_CMD
-    LATB &= 0xEF;
-    __delay_ms(200);
-
-    LATB |= 0b00100000;  // Allumer LED_CMD
-    LATB |= 0x10;
-    __delay_ms(200);
-
-    LATB &= 0b11011111;  // Éteindre LED_CMD
-    LATB &= 0xEF;
-    __delay_ms(200);
-}
-
 void motif_cool(void) {
     for (int i = 0; i < 64; i++) {
         LED_MATRIX[i*4] = 0;     // G
@@ -61,69 +42,76 @@ void init(void) {
     LATC = 0x00;  // Éteindre LED0-7
     LATB &= 0b11011111;  // Éteindre LED_CMD
     
-    // Configuation des entrées sorties analogiques
-    // ANA2 : passe bas
-    // ANA3 : passe bande low
-    // ANA4 : passe bande high
-    // ANA5 : passe haut
-    TRISA &= 0b00111100; // ANA2, ANA3, ANA4, ANA5 : INPUT
-    ANSELA &= 0b00111100; // ANA2, ANA3, ANA4, ANA5 : ANALOGIQUE
+    /* Configuration des entrées analogiques */
+    // AN2, AN3, AN4, AN5 en entrée analogique
+    TRISA |= 0b00111100;  // bits 2 à 5 en INPUT
+    ANSELA |= 0b00111100; // bits 2 à 5 en ANALOG
+    
+    /* Configuration du convertisseur ADC */
+    ADCON0 = 0x00; // ADC OFF au début, CHS à 0000
+    ADCON1 = 0x00; // Résultat justifié à droite
+    ADCON2 = 0x90; // TACQ + Clock de conversion
+}
+
+
+unsigned int read_adc_channel(unsigned char channel) {
+    unsigned int result;
+
+    ADCON0 = (channel << 2); // Positionner CHS
+    ADCON0bits.ADON = 1;     // Allumer l'ADC
+    __delay_us(5);           // Temps d'acquisition
+    ADCON0bits.GO = 1;       // Démarrer conversion
+    while (ADCON0bits.GO);   // Attendre fin conversion
+    result = (ADRESH << 8) | ADRESL;
+    ADCON0bits.ADON = 0;     // Éteindre l'ADC pour éviter du bruit
+
+    return result;
 }
 
 void read_filters(void) {
-    
+    passe_bas    = read_adc_channel(2) >> 7; // AN2 → 0..7
+    passe_bande1 = read_adc_channel(3) >> 7; // AN3 → 0..7
+    passe_bande2 = read_adc_channel(4) >> 7; // AN4 → 0..7
+    passe_haut   = read_adc_channel(5) >> 7; // AN5 → 0..7
 }
 
-void hsv_to_rgb_scaled(unsigned int h, char *r, char *g, char *b) {
-    float s = 1.0, v = 1.0; // Full saturation and brightness
-    float c = v * s;
-    float x = c * (1 - abs((h / 60) % 2 - 1));
-    float m = v - c;
-    float r_, g_, b_;
-
-    if(h < 60)      { r_ = c; g_ = x; b_ = 0; }
-    else if(h < 120){ r_ = x; g_ = c; b_ = 0; }
-    else if(h < 180){ r_ = 0; g_ = c; b_ = x; }
-    else if(h < 240){ r_ = 0; g_ = x; b_ = c; }
-    else if(h < 300){ r_ = x; g_ = 0; b_ = c; }
-    else            { r_ = c; g_ = 0; b_ = x; }
-
-    *r = (char)(r_ * 16);
-    *g = (char)(g_ * 16);
-    *b = (char)(b_ * 16);
-}
-
-void motif_rainbow_wave(void) {
-    static unsigned int base_hue = 0;
-
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            int index = (y * 8 + x) * 4;
-            unsigned int hue = (base_hue + x * 30 + y * 15) % 360;
-
-            char r, g, b;
-            hsv_to_rgb_scaled(hue, &r, &g, &b);
-
-            LED_MATRIX[index + 0] = g; // G
-            LED_MATRIX[index + 1] = r; // R
-            LED_MATRIX[index + 2] = b; // B
-            LED_MATRIX[index + 3] = 0; // W (optional)
+// Helper pour dessiner une colonne
+void draw_column(int x, int level, char r, char g, char b) {
+        for (int y = 0; y < level; y++) {
+            int index = ((7 - y) * 8 + x) * 4;
+            LED_MATRIX[index + 0] = g;
+            LED_MATRIX[index + 1] = r;
+            LED_MATRIX[index + 2] = b;
+            LED_MATRIX[index + 3] = 1; // Optionnel : allumer W
         }
     }
 
-    base_hue = (base_hue + 3) % 360;
+void draw_spectrum(void) {
+    // Effacer la matrice
+    for (int i = 0; i < 64; i++) {
+        LED_MATRIX[i*4] = 0;
+        LED_MATRIX[i*4+1] = 0;
+        LED_MATRIX[i*4+2] = 0;
+        LED_MATRIX[i*4+3] = 0;
+    }
+
+    draw_column(0, passe_bas, 6, 0, 0);      // Rouge
+    draw_column(2, passe_bande1, 6, 6, 0);  // Jaune
+    draw_column(4, passe_bande2, 0, 6, 0);   // Vert
+    draw_column(6, passe_haut, 0, 0, 6);     // Bleu
 }
 
 void main(void) {
     init();
-    motif_cool();
-    
+
     while(1) {
-    //motif_rainbow_wave(); // update the matrix pattern
-    LATB &= ~0x10;         // Turn off LED_MASTER
-    TX_64LEDS();
-    __delay_ms(2);
-    LATB |= 0x10;          // Turn on LED_MASTER
-    __delay_ms(5);        // Control speed of animation
-}
+        for (int i=0; i<8; i++){ // -------------------------------------------------------------- DEMO CODE
+            LATC = 0x01 << i;    // Commander les LEDs de test sur le PORTC ---------------------- DEMO CODE
+            __delay_ms(125);     // Macro de délai ----------------------------------------------- DEMO CODE
+        }
+        read_filters();
+        //draw_spectrum();
+        //TX_64LEDS();
+        
+    }
 }
