@@ -21,65 +21,44 @@ int passe_bande1;
 int passe_bande2;
 int passe_haut;
 
-void init(void) {
-    /* Configuration des entrées / sorties */
-    TRISB &= 0xEF; // LED_MASTER : OUTPUT
-    TRISC &= 0x00; // LED0-7     : OUTPUT
-    ANSELB &= 0b11011111; // LED_CMD : PAS_ANALOGIQUE
-    TRISB &= 0b11011111; // LED_CMD : OUTPUT
-    
-    /* Initialisation */
-    LATB &= 0xEF; // Éteindre LEDM
-    LATC = 0x00;  // Éteindre LED0-7
-    LATB &= 0b11011111;  // Éteindre LED_CMD
-    
-    /* Configuration des entrées analogiques */
-    // AN2, AN3, AN4, AN5 en entrée analogique
-    TRISA |= 0b00111100;  // bits 2 à 5 en INPUT
-    ANSELA |= 0b00111100; // bits 2 à 5 en ANALOG
-    
-    /* Configuration du convertisseur ADC */
-     // ADC config
-    ADCON0bits.ADFM = 1; // Right justified
-    ADCON0bits.ADCS = 1; // Clock truc 
-}
-
+int pause = 1;
+int mode = 0;
 
 unsigned int read_adc_channel(unsigned char channel) {
     int result;
 
     ADPCH = channel;            // Sélectionner le canal)
-    ADCON0bits.ADON = 1;          // Allumer l'ADC
+    ADCON0bits.ADON = 1;        // Allumer l'ADC
     __delay_us(5);              // Temps d'acquisition
     ADCON0bits.GO = 1;          // Démarrer la conversion
     while (ADCON0bits.GO);      // Attendre la fin
 
-    int min = 150;
-    int max = 700;
-    result = (ADRESH << 8) | ADRESL;
-    result = (result - min) * (max / (max - min));
+    result = (ADRESH << 8) | ADRESL; // concaténation des deux registres
+    int min = 300;
+    int max = 1023;
+    result = (result - min) * (1023 / (max - min)); // Petite formule de scale pour lisser les résultats sur une meilleure intervale
 
-    ADCON0bits.ADON = 0;          // Éteindre ADC pour éviter bruit (optionnel)
+    ADCON0bits.ADON = 0;          // Éteindre ADC pour éviter le bruit
     return result;
 }
 
 void read_filters(void) {
-    passe_bas    = read_adc_channel(2) >> 7; // AN2 → 0..7
-    passe_bande1 = read_adc_channel(3) >> 7; // AN3 → 0..7
-    passe_bande2 = read_adc_channel(4) >> 7; // AN4 → 0..7
-    passe_haut   = read_adc_channel(5) >> 7; // AN5 → 0..7
+    passe_bas    = read_adc_channel(5) >> 6;
+    passe_bande1 = read_adc_channel(3) >> 6;
+    passe_bande2 = read_adc_channel(2) >> 6;
+    passe_haut   = read_adc_channel(4) >> 6;
 }
 
 // Helper pour dessiner une colonne
 void draw_column(int x, int level, char r, char g, char b) {
-        for (int y = 0; y < level; y++) {
-            int index = ((7 - y) * 8 + x) * 4;
-            LED_MATRIX[index + 0] = g;
-            LED_MATRIX[index + 1] = r;
-            LED_MATRIX[index + 2] = b;
-            LED_MATRIX[index + 3] = 0; // pas de blanc parce que c'est trop douloureux pour les rétines de Emma
-        }
+    for (int y = 0; y < level; y++) {
+        int index = ((7 - y) * 8 + x) * 4;
+        LED_MATRIX[index + 0] = g;
+        LED_MATRIX[index + 1] = r;
+        LED_MATRIX[index + 2] = b;
+        LED_MATRIX[index + 3] = 0; // pas de blanc parce que c'est trop douloureux pour les rétines de Emma
     }
+}
 
 void draw_spectrum_rbw(void) {
     // Effacer la matrice
@@ -138,12 +117,54 @@ void draw_spectrum_aro(void) {
     draw_column(7, passe_haut,   3, 3, 3);
 }
 
+void init(void) {
+    /* Configuration des entrées / sorties */
+    TRISB &= 0xEF; // LED_MASTER : OUTPUT
+    TRISC &= 0x00; // LED0-7     : OUTPUT
+    ANSELB &= 0b11011111; // LED_CMD : PAS_ANALOGIQUE
+    TRISB &= 0b11011111; // LED_CMD : OUTPUT
+    
+    /* Initialisation */
+    LATB &= 0xEF; // Éteindre LEDM
+    LATC = 0x00;  // Éteindre LED0-7
+    LATB &= 0b11011111;  // Éteindre LED_CMD
+    
+    /* Configuration des entrées analogiques */
+    // AN2, AN3, AN4, AN5 en entrée analogique
+    TRISA |= 0b00111100;  // bits 2 à 5 en INPUT
+    ANSELA |= 0b00111100; // bits 2 à 5 en ANALOG
+    
+    /* Configuration du convertisseur ADC */
+    ADCON0bits.ADFM = 1; // Right justifiy
+    ADCON0bits.ADCS = 1; // Clock truc 
+    
+    /* Configuration des boutons */
+    // Bouton 0 et Bouton 1
+    TRISB |= 0b11000000;  // bits 1 et 2 en INPUT
+    ANSELB &= 0b00111111; // bits 1 et 2 : PAS_ANALOGIQUE
+    
+    read_filters();
+    draw_spectrum_lebanese();
+}
+
 void main(void) {
     init();
 
     while(1) {
-        read_filters();
-        draw_spectrum_lebanese();
+        if (pause){
+            read_filters();
+            switch (mode) {
+                case 0:
+                    draw_spectrum_lebanese();
+                    break;
+                case 1:
+                    draw_spectrum_rbw();
+                    break;
+                case 2:
+                    draw_spectrum_aro();
+                    break;
+            }
+        }
         TX_64LEDS();
         
     }
