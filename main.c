@@ -43,6 +43,7 @@ unsigned int read_adc_channel(unsigned char channel) {
 }
 
 void read_filters(void) {
+    // petit décalage pour dégager les bits non significatifs
     passe_bas    = read_adc_channel(5) >> 6;
     passe_bande1 = read_adc_channel(3) >> 6;
     passe_bande2 = read_adc_channel(2) >> 6;
@@ -88,14 +89,14 @@ void draw_spectrum_lebanese(void) {
         LED_MATRIX[i*4+3] = 0;
     }
 
-    draw_column(0, passe_bas,    6, 2, 0);
-    draw_column(1, passe_bas,    6, 2, 0);
-    draw_column(2, passe_bande1, 6, 4, 1);
-    draw_column(3, passe_bande1, 6, 4, 1);
-    draw_column(4, passe_bande2, 6, 6, 6);
-    draw_column(5, passe_bande2, 6, 6, 6);
-    draw_column(6, passe_haut,   6, 0, 4);
-    draw_column(7, passe_haut,   6, 0, 4);
+    draw_column(0, passe_bas,    12, 4, 0);
+    draw_column(1, passe_bas,    12, 4, 0);
+    draw_column(2, passe_bande1, 12, 8, 1);
+    draw_column(3, passe_bande1, 12, 8, 1);
+    draw_column(4, passe_bande2, 12, 12, 12);
+    draw_column(5, passe_bande2, 12, 12, 12);
+    draw_column(6, passe_haut,   12, 0, 8);
+    draw_column(7, passe_haut,   12, 0, 8);
 }
 
 void draw_spectrum_aro(void) {
@@ -139,9 +140,9 @@ void init(void) {
     ADCON0bits.ADCS = 1; // Clock truc 
     
     /* Configuration des boutons */
-    // Bouton 0 et Bouton 1
-    TRISB |= 0b11000000;  // bits 1 et 2 en INPUT
-    ANSELB &= 0b00111111; // bits 1 et 2 : PAS_ANALOGIQUE
+    // RB0 et RB1
+    TRISB |= 0b00000011;  // bits 1 et 2 en INPUT
+    ANSELB &= 0b11111100; // bits 1 et 2 : PAS_ANALOGIQUE
     
     read_filters();
     draw_spectrum_lebanese();
@@ -151,7 +152,8 @@ void main(void) {
     init();
 
     while(1) {
-        if (pause){
+
+        if (pause) {
             read_filters();
             switch (mode) {
                 case 0:
@@ -166,6 +168,6 @@ void main(void) {
             }
         }
         TX_64LEDS();
-        
     }
 }
+
